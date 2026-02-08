@@ -30,17 +30,20 @@
         }
         
         .frequency-display {
-            font-size: 2em;
-            margin: 20px 0;
+            font-size: 1em;
+            display: inline;
+            margin: 0;
         }
         
         .note-name {
             font-size: 1em;
-            margin-bottom: 20px;
+            margin: 10px 0;
         }
         
-        .buttons {
-            margin: 20px 0;
+        .chord-notes-container {
+            font-size: 1em;
+            line-height: 1.5;
+            margin: 10px 0;
         }
         
         button {
@@ -68,12 +71,6 @@
             color: black;
         }
         
-        .chord-display {
-            margin-top: 30px;
-            border-top: 1px solid black;
-            padding-top: 20px;
-        }
-        
         .chord-title {
             font-size: 1em;
             margin-bottom: 10px;
@@ -85,17 +82,17 @@
             margin-bottom: 10px;
         }
         
-        .play-chord-btn, .play-all-btn {
+        .play-all-btn {
             background: white;
             color: black;
         }
         
-        .play-chord-btn:disabled, .play-all-btn:disabled {
+        .play-all-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
         
-        .play-chord-btn:disabled:hover, .play-all-btn:disabled:hover {
+        .play-all-btn:disabled:hover {
             background: white;
             color: black;
         }
@@ -120,21 +117,22 @@
         
 
         
-        <div class="frequency-display" id="frequency">---</div>
-        <div class="note-name" id="noteName"></div>
-        
-        <div class="buttons">
-            <button class="again-btn" id="againBtn" onclick="playAgain()">🔊</button>
-            <button class="no-btn" id="noBtn" onclick="rejectNote()">↻</button>
-            <button class="yes-btn" id="yesBtn" onclick="acceptNote()">Select</button>
-        </div>
-        
-        <div class="chord-display">
+        <div class="main-section">
             <div class="chord-title"><strong>Your Chord</strong></div>
-            <div class="chord-notes" id="chordNotes">---</div>
+            <div class="chord-notes-container">
+                <span id="chordNotes">---</span>
+                <span id="separator" style="display: none;"> / </span>
+                <span id="currentFrequencyDisplay" style="display: none;">
+                    <span class="frequency-display" id="frequency">---</span>
+                    <button class="again-btn" id="againBtn" onclick="playAgain()">🔊</button>
+                    <button class="no-btn" id="noBtn" onclick="rejectNote()">↻</button>
+                    <button class="yes-btn" id="yesBtn" onclick="acceptNote()">Select</button>
+                    <button class="new-chord-btn" id="newChordBtn" onclick="newChord()" disabled>Save Chord</button>
+                </span>
+            </div>
+            <div class="note-name" id="noteName"></div>
             <br>
-            <button class="play-chord-btn" id="playChordBtn" onclick="playChord()" disabled>Play Chord</button>
-            <button class="new-chord-btn" id="newChordBtn" onclick="newChord()" disabled>Save Chord</button>
+            
             <div id="allChords" style="margin-top: 20px; border-top: 1px solid black; padding-top: 20px;"></div>
             <div id="playbackControls" style="margin-top: 10px; display: none;">
                 <button class="play-all-btn" id="playAllBtn" onclick="playAllChords()">Play Chords</button>
@@ -145,7 +143,6 @@
             <div style="margin-top: 20px; border-top: 1px solid black; padding-top: 20px;">
                 <button class="clear-btn" onclick="clearChord()">Clear</button>
             </div>
-            
         </div>
     </div>
 
@@ -274,6 +271,7 @@
             document.getElementById('frequency').textContent = currentFrequency.toFixed(2) + ' Hz';
             document.getElementById('noteName').textContent = '';
             
+            updateChordDisplay();
             playFrequency(currentFrequency);
         }
         
@@ -299,17 +297,27 @@
         
         function updateChordDisplay() {
             const chordNotesEl = document.getElementById('chordNotes');
-            const playChordBtn = document.getElementById('playChordBtn');
+            const separatorEl = document.getElementById('separator');
+            const currentFreqDisplayEl = document.getElementById('currentFrequencyDisplay');
             const newChordBtn = document.getElementById('newChordBtn');
             
             if (chord.length === 0) {
-                chordNotesEl.textContent = '---';
-                playChordBtn.disabled = true;
+                chordNotesEl.textContent = '';
+                chordNotesEl.style.display = 'none';
+                separatorEl.style.display = 'none';
                 newChordBtn.disabled = true;
             } else {
                 chordNotesEl.textContent = chord.map(n => `${n.freq.toFixed(2)} Hz`).join(' / ');
-                playChordBtn.disabled = false;
+                chordNotesEl.style.display = 'inline';
+                separatorEl.style.display = 'inline';
                 newChordBtn.disabled = false;
+            }
+            
+            // Always show the current frequency display when there's a current frequency
+            if (currentFrequency !== null) {
+                currentFreqDisplayEl.style.display = 'inline';
+            } else {
+                currentFreqDisplayEl.style.display = 'none';
             }
         }
         
@@ -424,6 +432,11 @@
         }
         
         function newChord() {
+            // If there's a current frequency, add it to the chord first
+            if (currentFrequency && !chord.some(n => n.freq === currentFrequency)) {
+                chord.push({ freq: currentFrequency });
+            }
+            
             if (chord.length === 0) return;
             
             // Save current chord to the list with random duration between 0 and 10
@@ -454,7 +467,7 @@
             let html = '<div style="margin-top: 10px;"><strong>Chords:</strong></div><ul>';
             allChords.forEach((savedChord, index) => {
                 const freqInputs = savedChord.notes.map((note, noteIndex) => 
-                    `<input type="text" value="${note.freq.toFixed(2)}" onchange="updateChordFrequency(${index}, ${noteIndex}, this.value)" />`
+                    `<input type="text" value="${note.freq.toFixed(2)}" onchange="updateChordFrequency(${index}, ${noteIndex}, this.value)" /> <button onclick="deleteFrequencyFromSavedChord(${index}, ${noteIndex})" style="font-size: 0.9em; padding: 0px 4px;">X</button>`
                 ).join(' / ');
                 
                 // Show editable duration field with reload button
@@ -520,6 +533,15 @@
             updateChordDisplay();
             updateAllChordsDisplay();
             generateNewNote();
+        }
+        
+        function deleteFrequencyFromSavedChord(chordIndex, noteIndex) {
+            allChords[chordIndex].notes.splice(noteIndex, 1);
+            // If the chord has no notes left, delete the entire chord
+            if (allChords[chordIndex].notes.length === 0) {
+                allChords.splice(chordIndex, 1);
+            }
+            updateAllChordsDisplay();
         }
         
         // Start with a random note
