@@ -131,9 +131,8 @@
                 </span>
             </div>
             <div class="note-name" id="noteName"></div>
-            <br>
             
-            <div id="allChords" style="margin-top: 20px; border-top: 1px solid black; padding-top: 20px;"></div>
+            <div id="allChords" style="margin-top: 20px;"></div>
             <div id="playbackControls" style="margin-top: 10px; display: none;">
                 <button class="play-all-btn" id="playAllBtn" onclick="playAllChords()">Play Chords</button>
                 <button id="loopBtn" onclick="toggleLoop()">Loop</button>
@@ -305,12 +304,17 @@
                 chordNotesEl.textContent = '';
                 chordNotesEl.style.display = 'none';
                 separatorEl.style.display = 'none';
-                newChordBtn.disabled = true;
             } else {
                 chordNotesEl.textContent = chord.map(n => `${n.freq.toFixed(2)} Hz`).join(' / ');
                 chordNotesEl.style.display = 'inline';
                 separatorEl.style.display = 'inline';
+            }
+            
+            // Enable Save Chord button if there's a current frequency or chord has notes
+            if (currentFrequency !== null || chord.length > 0) {
                 newChordBtn.disabled = false;
+            } else {
+                newChordBtn.disabled = true;
             }
             
             // Always show the current frequency display when there's a current frequency
@@ -437,6 +441,7 @@
                 chord.push({ freq: currentFrequency });
             }
             
+            // Allow saving even with just one frequency
             if (chord.length === 0) return;
             
             // Save current chord to the list with random duration between 0 and 10
@@ -464,7 +469,7 @@
             
             playbackControls.style.display = 'block';
             
-            let html = '<div style="margin-top: 10px;"><strong>Chords:</strong></div><ul>';
+            let html = '<ul style="margin-top: 10px; padding-top: 10px; border-top: 1px solid black;">';
             allChords.forEach((savedChord, index) => {
                 const freqInputs = savedChord.notes.map((note, noteIndex) => 
                     `<input type="text" value="${note.freq.toFixed(2)}" onchange="updateChordFrequency(${index}, ${noteIndex}, this.value)" /> <button onclick="deleteFrequencyFromSavedChord(${index}, ${noteIndex})" style="font-size: 0.9em; padding: 0px 4px;">X</button>`
