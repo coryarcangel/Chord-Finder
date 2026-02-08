@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chord Finder v.1</title>
+    <style>
+        body {
+            font-family: "Times New Roman", Times, serif;
+            background: white;
+            color: black;
+            padding: 20px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+        
+        .container {
+            background: white;
+        }
+        
+        h1 {
+            font-size: 1em;
+            font-weight: normal;
+            margin-bottom: 20px;
+        }
+        
+        .subtitle {
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+        
+        .frequency-display {
+            font-size: 2em;
+            margin: 20px 0;
+        }
+        
+        .note-name {
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+        
+        .buttons {
+            margin: 20px 0;
+        }
+        
+        button {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 1em;
+            padding: 2px 8px;
+            border: 1px solid black;
+            background: white;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        
+        button:hover {
+            background: black;
+            color: white;
+        }
+        
+        button.active {
+            background: black;
+            color: white;
+        }
+        
+        .yes-btn, .no-btn {
+            background: white;
+            color: black;
+        }
+        
+        .chord-display {
+            margin-top: 30px;
+            border-top: 1px solid black;
+            padding-top: 20px;
+        }
+        
+        .chord-title {
+            font-size: 1em;
+            margin-bottom: 10px;
+        }
+        
+        .chord-notes {
+            font-size: 1em;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+        
+        .play-chord-btn, .play-all-btn {
+            background: white;
+            color: black;
+        }
+        
+        .play-chord-btn:disabled, .play-all-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .play-chord-btn:disabled:hover, .play-all-btn:disabled:hover {
+            background: white;
+            color: black;
+        }
+        
+        input[type="text"], input[type="number"] {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 1em;
+            border: 1px solid black;
+            background: white;
+            padding: 2px 4px;
+            width: 60px;
+        }
+        
+        .chord-entry {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Chord Finder v.1</h1>
+        
+
+        
+        <div class="frequency-display" id="frequency">---</div>
+        <div class="note-name" id="noteName"></div>
+        
+        <div class="buttons">
+            <button class="again-btn" id="againBtn" onclick="playAgain()">🔊</button>
+            <button class="no-btn" id="noBtn" onclick="rejectNote()">↻</button>
+            <button class="yes-btn" id="yesBtn" onclick="acceptNote()">Select</button>
+        </div>
+        
+        <div class="chord-display">
+            <div class="chord-title"><strong>Your Chord</strong></div>
+            <div class="chord-notes" id="chordNotes">---</div>
+            <br>
+            <button class="play-chord-btn" id="playChordBtn" onclick="playChord()" disabled>Play Chord</button>
+            <button class="new-chord-btn" id="newChordBtn" onclick="newChord()" disabled>Save Chord</button>
+            <div id="allChords" style="margin-top: 20px; border-top: 1px solid black; padding-top: 20px;"></div>
+            <div id="playbackControls" style="margin-top: 10px; display: none;">
+                <button class="play-all-btn" id="playAllBtn" onclick="playAllChords()">Play Chords</button>
+                <button id="loopBtn" onclick="toggleLoop()">Loop</button>
+                <button id="noLoopBtn" onclick="toggleLoop()" class="active">No Loop</button>
+                <button onclick="exportChords()">Export</button>
+            </div>
+            <div style="margin-top: 20px; border-top: 1px solid black; padding-top: 20px;">
+                <button class="clear-btn" onclick="clearChord()">Clear</button>
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        let audioContext;
+        let currentFrequency = null;
+        let currentOscillators = []; // Track all playing oscillators
+        let chord = [];
+        let allChords = []; // Track all completed chords
+        let waveType = 'pluck';
+        let isLooping = false;
+        
+        // Frequency range: ~100Hz to ~1000Hz (covers roughly 3 octaves)
+        const MIN_FREQ = 100;
+        const MAX_FREQ = 1000;
+        
+        function setWaveType(type) {
+            waveType = 'pluck'; // Always use pluck
+        }
+        
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+        
+        function getRandomFrequency() {
+            // Generate truly random frequency within range
+            return Math.random() * (MAX_FREQ - MIN_FREQ) + MIN_FREQ;
+        }
+        
+        function createPluckSound(frequency, duration = 2) {
+            // Karplus-Strong inspired pluck synthesis
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            const filter = audioContext.createBiquadFilter();
+            
+            osc.type = 'sawtooth';
+            osc.frequency.value = frequency;
+            
+            // Quick attack, exponential decay
+            gain.gain.setValueAtTime(0.5, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+            
+            // Low-pass filter to soften the sound
+            filter.type = 'lowpass';
+            filter.frequency.value = frequency * 4;
+            filter.Q.value = 1;
+            
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            osc.start();
+            osc.stop(audioContext.currentTime + duration);
+            
+            return osc;
+        }
+        
+        function playFrequency(frequency) {
+            initAudio();
+            stopCurrentSound();
+            
+            if (waveType === 'pluck') {
+                // Use pluck synthesis
+                const pluckOsc = createPluckSound(frequency);
+                currentOscillators.push(pluckOsc);
+                
+                // Also play chord notes with pluck
+                if (chord.length > 0) {
+                    chord.forEach(note => {
+                        const osc = createPluckSound(note.freq);
+                        currentOscillators.push(osc);
+                    });
+                }
+            } else {
+                // Use standard oscillator
+                const newOsc = audioContext.createOscillator();
+                const newGain = audioContext.createGain();
+                
+                newOsc.type = waveType;
+                newOsc.frequency.value = frequency;
+                
+                newGain.gain.value = 0.3;
+                
+                newOsc.connect(newGain);
+                newGain.connect(audioContext.destination);
+                
+                newOsc.start();
+                currentOscillators.push(newOsc);
+                
+                // Also play all chord notes together
+                if (chord.length > 0) {
+                    chord.forEach(note => {
+                        const osc = audioContext.createOscillator();
+                        const gain = audioContext.createGain();
+                        
+                        osc.type = waveType;
+                        osc.frequency.value = note.freq;
+                        gain.gain.value = 0.2 / (chord.length + 1);
+                        
+                        osc.connect(gain);
+                        gain.connect(audioContext.destination);
+                        
+                        osc.start();
+                        currentOscillators.push(osc);
+                    });
+                }
+            }
+        }
+        
+        function stopCurrentSound() {
+            currentOscillators.forEach(osc => {
+                try {
+                    osc.stop();
+                } catch(e) {
+                    // Already stopped
+                }
+            });
+            currentOscillators = [];
+        }
+        
+        function generateNewNote() {
+            currentFrequency = getRandomFrequency();
+            
+            document.getElementById('frequency').textContent = currentFrequency.toFixed(2) + ' Hz';
+            document.getElementById('noteName').textContent = '';
+            
+            playFrequency(currentFrequency);
+        }
+        
+        function acceptNote() {
+            if (currentFrequency) {
+                chord.push({ freq: currentFrequency });
+                updateChordDisplay();
+                stopCurrentSound();
+                generateNewNote();
+            }
+        }
+        
+        function rejectNote() {
+            stopCurrentSound();
+            generateNewNote();
+        }
+        
+        function playAgain() {
+            if (currentFrequency) {
+                playFrequency(currentFrequency);
+            }
+        }
+        
+        function updateChordDisplay() {
+            const chordNotesEl = document.getElementById('chordNotes');
+            const playChordBtn = document.getElementById('playChordBtn');
+            const newChordBtn = document.getElementById('newChordBtn');
+            
+            if (chord.length === 0) {
+                chordNotesEl.textContent = '---';
+                playChordBtn.disabled = true;
+                newChordBtn.disabled = true;
+            } else {
+                chordNotesEl.textContent = chord.map(n => `${n.freq.toFixed(2)} Hz`).join(' / ');
+                playChordBtn.disabled = false;
+                newChordBtn.disabled = false;
+            }
+        }
+        
+        function playChord() {
+            if (chord.length === 0) return;
+            
+            initAudio();
+            stopCurrentSound();
+            
+            if (waveType === 'pluck') {
+                // Use pluck for each note
+                chord.forEach(note => {
+                    createPluckSound(note.freq);
+                });
+            } else {
+                // Standard oscillators
+                const oscillators = [];
+                const gains = [];
+                
+                chord.forEach(note => {
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    
+                    osc.type = waveType;
+                    osc.frequency.value = note.freq;
+                    gain.gain.value = 0.2 / chord.length;
+                    
+                    osc.connect(gain);
+                    gain.connect(audioContext.destination);
+                    
+                    osc.start();
+                    oscillators.push(osc);
+                    gains.push(gain);
+                });
+                
+                // Stop all after 2 seconds
+                setTimeout(() => {
+                    oscillators.forEach(osc => osc.stop());
+                }, 2000);
+            }
+        }
+        
+        function toggleLoop() {
+            isLooping = !isLooping;
+            
+            // Update button states
+            document.getElementById('loopBtn').classList.toggle('active', isLooping);
+            document.getElementById('noLoopBtn').classList.toggle('active', !isLooping);
+        }
+        
+        function playAllChords() {
+            if (allChords.length === 0) return;
+            
+            stopCurrentSound();
+            
+            let chordIndex = 0;
+            
+            function playNextChord() {
+                if (chordIndex >= allChords.length) {
+                    // Check if we should loop
+                    if (isLooping) {
+                        chordIndex = 0; // Reset to beginning
+                    } else {
+                        return; // Stop playing
+                    }
+                }
+                
+                const currentChord = allChords[chordIndex];
+                const duration = currentChord.duration * 500; // Convert to milliseconds
+                initAudio();
+                
+                if (waveType === 'pluck') {
+                    // Use pluck for each note
+                    currentChord.notes.forEach(note => {
+                        createPluckSound(note.freq, currentChord.duration);
+                    });
+                    
+                    // Move to next after duration
+                    setTimeout(() => {
+                        chordIndex++;
+                        playNextChord();
+                    }, duration);
+                } else {
+                    // Standard oscillators
+                    const oscillators = [];
+                    
+                    currentChord.notes.forEach(note => {
+                        const osc = audioContext.createOscillator();
+                        const gain = audioContext.createGain();
+                        
+                        osc.type = waveType;
+                        osc.frequency.value = note.freq;
+                        gain.gain.value = 0.2 / currentChord.notes.length;
+                        
+                        osc.connect(gain);
+                        gain.connect(audioContext.destination);
+                        
+                        osc.start();
+                        oscillators.push(osc);
+                    });
+                    
+                    // Stop after duration and play next
+                    setTimeout(() => {
+                        oscillators.forEach(osc => osc.stop());
+                        chordIndex++;
+                        playNextChord();
+                    }, duration);
+                }
+            }
+            
+            playNextChord();
+        }
+        
+        function newChord() {
+            if (chord.length === 0) return;
+            
+            // Save current chord to the list with random duration between 0 and 10
+            allChords.push({
+                notes: [...chord],
+                duration: Math.random() * 10
+            });
+            
+            // Clear current chord and start fresh
+            chord = [];
+            updateChordDisplay();
+            updateAllChordsDisplay();
+            generateNewNote();
+        }
+        
+        function updateAllChordsDisplay() {
+            const allChordsEl = document.getElementById('allChords');
+            const playbackControls = document.getElementById('playbackControls');
+            
+            if (allChords.length === 0) {
+                allChordsEl.innerHTML = '';
+                playbackControls.style.display = 'none';
+                return;
+            }
+            
+            playbackControls.style.display = 'block';
+            
+            let html = '<div style="margin-top: 10px;"><strong>Chords:</strong></div><ul>';
+            allChords.forEach((savedChord, index) => {
+                const freqInputs = savedChord.notes.map((note, noteIndex) => 
+                    `<input type="text" value="${note.freq.toFixed(2)}" onchange="updateChordFrequency(${index}, ${noteIndex}, this.value)" />`
+                ).join(' / ');
+                
+                // Show editable duration field with reload button
+                const durationHTML = `<input type="number" value="${savedChord.duration.toFixed(2)}" step="0.1" min="0" onchange="updateChordDuration(${index}, this.value)" /> s <button onclick="randomizeDuration(${index})">↻</button>`;
+                
+                html += `<li>Chord ${index + 1}: ${freqInputs} Hz | Duration: ${durationHTML} | <button onclick="deleteChord(${index})">X</button></li>`;
+            });
+            html += '</ul>';
+            
+            allChordsEl.innerHTML = html;
+        }
+        
+        function randomizeDuration(chordIndex) {
+            allChords[chordIndex].duration = Math.random() * 10;
+            updateAllChordsDisplay();
+        }
+        
+        function exportChords() {
+            if (allChords.length === 0) return;
+            
+            // Create CSV content
+            let csv = 'Chord,Frequencies (Hz),Duration (s)\n';
+            
+            allChords.forEach((savedChord, index) => {
+                const frequencies = savedChord.notes.map(n => n.freq.toFixed(2)).join(' / ');
+                csv += `Chord ${index + 1},"${frequencies}",${savedChord.duration.toFixed(2)}\n`;
+            });
+            
+            // Create download link
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'chords.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        function deleteChord(chordIndex) {
+            allChords.splice(chordIndex, 1);
+            updateAllChordsDisplay();
+        }
+        
+        function updateChordFrequency(chordIndex, noteIndex, newValue) {
+            const freq = parseFloat(newValue);
+            if (!isNaN(freq) && freq > 0) {
+                allChords[chordIndex].notes[noteIndex].freq = freq;
+            }
+        }
+        
+        function updateChordDuration(chordIndex, newValue) {
+            const duration = parseFloat(newValue);
+            if (!isNaN(duration) && duration >= 0) {
+                allChords[chordIndex].duration = duration;
+            }
+        }
+        
+        function clearChord() {
+            stopCurrentSound();
+            chord = [];
+            allChords = [];
+            currentFrequency = null;
+            updateChordDisplay();
+            updateAllChordsDisplay();
+            generateNewNote();
+        }
+        
+        // Start with a random note
+        generateNewNote();
+    </script>
+</body>
+</html>
